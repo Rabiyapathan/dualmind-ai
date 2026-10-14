@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Uploaded documents and generated indexes
+backend/data/uploads/*
+backend/data/indexes/*
+backend/data/metadata/*
+
+# Editors
+.vscode/
+.idea/
