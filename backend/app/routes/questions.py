@@ -63,33 +63,47 @@ def ask_document(document_id):
     if not isinstance(question, str) or not question.strip():
         return jsonify({"error": "A question is required."}), 400
 
+    mode = data.get("mode", "document")
+    if not isinstance(mode, str) or mode not in {"document", "general", "combined"}:
+        return jsonify({
+            "error": "mode must be document, general, or combined."
+        }), 400
+
     top_k = data.get("top_k", 3)
     if isinstance(top_k, bool) or not isinstance(top_k, int) or top_k < 1:
         return jsonify({"error": "top_k must be a positive integer."}), 400
 
-    store = DocumentStore(current_app.config["INDEX_FOLDER"])
+    passages = []
 
     try:
-        index, chunks = store.load(document_id)
-    except FileNotFoundError:
-        return jsonify({"error": "Document index not found."}), 404
-    except ValueError:
-        return jsonify({"error": "Invalid document ID."}), 400
+        if mode in {"document", "combined"}:
+            store = DocumentStore(current_app.config["INDEX_FOLDER"])
 
-    try:
-        retrieval = RetrievalService()
-        passages = retrieval.search(
-            question=question.strip(),
-            top_k=top_k,
-            index=index,
-            chunks=chunks,
+            try:
+                index, chunks = store.load(document_id)
+            except FileNotFoundError:
+                return jsonify({"error": "Document index not found."}), 404
+            except ValueError:
+                return jsonify({"error": "Invalid document ID."}), 400
+
+            retrieval = RetrievalService()
+            passages = retrieval.search(
+                question=question.strip(),
+                top_k=top_k,
+                index=index,
+                chunks=chunks,
+            )
+
+        answer = QAService().answer(
+            question.strip(),
+            passages,
+            mode=mode,
         )
 
-        answer = QAService().answer(question.strip(), passages)
-
         return jsonify({
-            "document_id": document_id,
+            "document_id": document_id if mode != "general" else None,
             "question": question.strip(),
+            "mode": mode,
             "answer": answer,
             "sources": [
                 {"page": passage["page"], "text": passage["text"]}
@@ -98,8 +112,7 @@ def ask_document(document_id):
         }), 200
 
     except Exception:
-        current_app.logger.exception("Document question answering failed")
+        current_app.logger.exception("Question answering failed")
         return jsonify({
             "error": "Could not generate an answer. Check the server logs."
         }), 502
-
